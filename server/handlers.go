@@ -68,6 +68,7 @@ func (n *Node) startHTTPServer() {
 	mux.HandleFunc("/query/select", handleCommand(n))
 	mux.HandleFunc("/query/update", handleCommand(n))
 	mux.HandleFunc("/query/delete", handleCommand(n))
+	mux.HandleFunc("/query/raw", handleCommand(n))
 
 	log.Printf("Node %s listening on %s", n.ID, n.Port)
 	log.Fatal(http.ListenAndServe(":"+n.Port, mux))

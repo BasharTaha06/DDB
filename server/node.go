@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -136,6 +137,8 @@ func (n *Node) runFollower() {
 			} else if cmd.Path == "/db/drop" || cmd.Path == "/db/create" || cmd.Path == "/table/create" {
 				// Master only actions
 				cmd.Reply <- CommandReply{StatusCode: 403, Body: []byte(fmt.Sprintf(`{"error": "Action denied. Rule: Only Master can Create/Drop DB and Create Tables. Current Master is %s"}`, n.LeaderID))}
+			} else if cmd.Path == "/query/raw" && strings.Contains(strings.ToUpper(string(cmd.Body)), "DROP DATABASE") {
+				cmd.Reply <- CommandReply{StatusCode: 403, Body: []byte(`{"error": "DROP DATABASE queries are only allowed on the Master node."}`)}
 			} else {
 				// All nodes can query (forward write to leader)
 				n.forwardCommand(cmd)

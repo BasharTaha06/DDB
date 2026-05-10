@@ -74,6 +74,9 @@ func (n *Node) processCommand(cmd CommandMsg) {
 	case "/query/delete":
 		query, _ := req["query"].(map[string]interface{})
 		result, err = n.Engine.Delete(dbName, tableName, query)
+	case "/query/raw":
+		rawSQL, _ := req["sql"].(string)
+		result, err = n.Engine.ExecRaw(dbName, rawSQL)
 	default:
 		cmd.Reply <- CommandReply{StatusCode: 404, Body: []byte(`{"error": "not found"}`)}
 		return
@@ -81,6 +84,10 @@ func (n *Node) processCommand(cmd CommandMsg) {
 
 	// Replicate writes to followers if successful
 	isWrite := cmd.Path != "/query/select"
+	if cmd.Path == "/query/raw" {
+		sqlUpper := strings.ToUpper(strings.TrimSpace(req["sql"].(string)))
+		isWrite = !strings.HasPrefix(sqlUpper, "SELECT") && !strings.HasPrefix(sqlUpper, "SHOW")
+	}
 	if err == nil && isWrite && n.State == Leader {
 		n.replicateToFollowers(cmd)
 	}

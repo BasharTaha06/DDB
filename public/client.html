@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Data Entry</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h1 { color: #2c3e50; text-align: center; margin-top: 0; }
+        label { display: block; margin-top: 15px; font-weight: bold; color: #333; }
+        input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 14px; }
+        button { margin-top: 25px; padding: 12px; width: 100%; background: #2ecc71; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        button:hover { background: #27ae60; }
+        #status { margin-top: 15px; text-align: center; font-weight: bold; }
+        .success { color: #2ecc71; }
+        .error { color: #e74c3c; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Register User</h1>
+    
+    <label>ID:</label>
+    <input type="number" id="userId" placeholder="Enter ID number">
+
+    <label>Name:</label>
+    <input type="text" id="userName" placeholder="Enter full name">
+
+    <label>Role:</label>
+    <input type="text" id="userRole" placeholder="e.g. Admin, User, Guest">
+
+    <button onclick="submitData()">Submit Data</button>
+
+    <div id="status"></div>
+</div>
+
+<script>
+    let offlineQueue = JSON.parse(localStorage.getItem('offlineQueue') || '[]');
+
+    async function submitData() {
+        const id = document.getElementById('userId').value;
+        const name = document.getElementById('userName').value;
+        const role = document.getElementById('userRole').value;
+        const statusDiv = document.getElementById('status');
+
+        if (!id || !name || !role) {
+            statusDiv.className = "error";
+            statusDiv.innerText = "Please fill in all fields.";
+            return;
+        }
+
+        statusDiv.className = "";
+        statusDiv.innerText = "Submitting...";
+
+        const payload = {
+            db: "mydb",
+            table: "users",
+            record: { id, name, role }
+        };
+
+        try {
+            const res = await fetch('/query/insert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                statusDiv.className = "success";
+                statusDiv.innerText = "Success! User data has been saved to the server.";
+                clearForm();
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (e) {
+            // Offline mode: save to queue
+            offlineQueue.push(payload);
+            localStorage.setItem('offlineQueue', JSON.stringify(offlineQueue));
+            
+            statusDiv.className = "error";
+            statusDiv.innerText = "Servers are offline! Data saved locally and will sync when servers return.";
+            clearForm();
+        }
+    }
+
+    function clearForm() {
+        document.getElementById('userId').value = '';
+        document.getElementById('userName').value = '';
+        document.getElementById('userRole').value = '';
+    }
+
+    // Periodically try to send queued data
+    setInterval(async () => {
+        if (offlineQueue.length > 0) {
+            document.getElementById('status').className = "";
+            document.getElementById('status').innerText = `Syncing ${offlineQueue.length} offline records...`;
+            
+            let successful = [];
+            for (let i = 0; i < offlineQueue.length; i++) {
+                try {
+                    const res = await fetch('/query/insert', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(offlineQueue[i])
+                    });
+                    if (res.ok) {
+                        successful.push(i);
+                    }
+                } catch(e) {
+                    break; // stop trying if server is still offline
+                }
+            }
+
+            // Remove successful records from queue
+            if (successful.length > 0) {
+                offlineQueue = offlineQueue.filter((_, index) => !successful.includes(index));
+                localStorage.setItem('offlineQueue', JSON.stringify(offlineQueue));
+                document.getElementById('status').className = "success";
+                document.getElementById('status').innerText = "Offline data successfully synced to the server!";
+            } else {
+                document.getElementById('status').className = "error";
+                document.getElementById('status').innerText = `Servers still offline. ${offlineQueue.length} records waiting.`;
+            }
+        }
+    }, 5000); // Check every 5 seconds
+</script>
+
+</body>
+</html>

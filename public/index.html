@@ -45,17 +45,10 @@
 
         <!-- Queries -->
         <div class="card">
-            <h2>Query Data</h2>
-            <label>JSON Record to Insert:</label>
-            <textarea id="insertData" rows="3">{"id": 1, "name": "Alice", "role": "Admin"}</textarea>
-            <button onclick="insertData()">Insert Record</button>
-
-            <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ddd;">
-
-            <label>JSON Query Filter (leave {} for all):</label>
-            <input type="text" id="selectQuery" value="{}">
-            <button onclick="selectData()" style="background: #2ecc71;">Select / View Table</button>
-            <button onclick="deleteData()" style="background: #e74c3c;">Delete Record</button>
+            <h2>Raw SQL Queries</h2>
+            <label>Write your SQL Query (INSERT, SELECT, UPDATE, DELETE):</label>
+            <textarea id="rawSQL" rows="4">SELECT * FROM users;</textarea>
+            <button onclick="executeSQL()" style="background: #2ecc71;">Execute SQL</button>
         </div>
     </div>
 
@@ -104,44 +97,18 @@
         await sendRequest('/table/create', 'POST', { db, table, attributes: attrs });
     }
 
-    async function insertData() {
+    async function executeSQL() {
         const db = document.getElementById('dbName').value;
-        const table = document.getElementById('tableName').value;
+        const sql = document.getElementById('rawSQL').value;
         try {
-            const record = JSON.parse(document.getElementById('insertData').value);
-            await sendRequest('/query/insert', 'POST', { db, table, record });
-            selectData(); // auto refresh
-        } catch(e) {
-            alert("Invalid JSON for Insert Data");
-        }
-    }
-
-    async function selectData() {
-        const db = document.getElementById('dbName').value;
-        const table = document.getElementById('tableName').value;
-        try {
-            const query = JSON.parse(document.getElementById('selectQuery').value);
-            const data = await sendRequest('/query/select', 'POST', { db, table, query });
-            
+            const data = await sendRequest('/query/raw', 'POST', { db, sql });
             if (data.success && data.data && data.data.length > 0) {
                 renderTable(data.data);
             } else {
-                document.getElementById('tableContainer').innerHTML = "<p>No rows found.</p>";
+                document.getElementById('tableContainer').innerHTML = "<p>Execution successful. No rows to display.</p>";
             }
         } catch(e) {
-            alert("Invalid JSON for Select Query");
-        }
-    }
-
-    async function deleteData() {
-        const db = document.getElementById('dbName').value;
-        const table = document.getElementById('tableName').value;
-        try {
-            const query = JSON.parse(document.getElementById('selectQuery').value);
-            await sendRequest('/query/delete', 'POST', { db, table, query });
-            selectData(); // auto refresh
-        } catch(e) {
-            alert("Invalid JSON for Delete Query");
+            alert("Error executing SQL");
         }
     }
 
