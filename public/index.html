@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DDB Node Manager</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1, h2 { color: #2c3e50; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #fafafa; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { margin-top: 15px; padding: 10px 15px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #2980b9; }
+        .status { padding: 10px; margin-bottom: 20px; border-radius: 4px; font-weight: bold; text-align: center; background: #e8f8f5; color: #1abc9c; }
+        #results { margin-top: 20px; background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; font-family: monospace; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Node Dashboard (<span id="portDisplay"></span>)</h1>
+    <div class="status" id="nodeStatus">Connecting to node...</div>
+
+    <div class="grid">
+        <!-- DB Management -->
+        <div class="card">
+            <h2>Database & Table setup</h2>
+            <label>Database Name:</label>
+            <input type="text" id="dbName" value="mydb" placeholder="e.g. mydb">
+            <button onclick="createDB()">Create Database</button>
+
+            <label>Table Name:</label>
+            <input type="text" id="tableName" value="users" placeholder="e.g. users">
+            <label>Attributes (comma separated):</label>
+            <input type="text" id="tableAttrs" value="id,name,role" placeholder="e.g. id,name,role">
+            <button onclick="createTable()">Create Table</button>
+        </div>
+
+        <!-- Queries -->
+        <div class="card">
+            <h2>Query Data</h2>
+            <label>JSON Record to Insert:</label>
+            <textarea id="insertData" rows="3">{"id": 1, "name": "Alice", "role": "Admin"}</textarea>
+            <button onclick="insertData()">Insert Record</button>
+
+            <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ddd;">
+
+            <label>JSON Query Filter (leave {} for all):</label>
+            <input type="text" id="selectQuery" value="{}">
+            <button onclick="selectData()" style="background: #2ecc71;">Select / View Table</button>
+        </div>
+    </div>
+
+    <h2>Results Log</h2>
+    <div id="results">Logs will appear here...</div>
+    
+    <h2>Table Data View</h2>
+    <div id="tableContainer">No data loaded yet. Click Select to view table data.</div>
+</div>
+
+<script>
+    document.getElementById('portDisplay').innerText = window.location.port;
+
+    async function sendRequest(path, method, bodyObj) {
+        document.getElementById('results').innerText = `Sending request to ${path}...`;
+        try {
+            const res = await fetch(path, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyObj)
+            });
+            const data = await res.json();
+            document.getElementById('results').innerText = JSON.stringify(data, null, 2);
+            return data;
+        } catch (e) {
+            document.getElementById('results').innerText = "Error: " + e.message;
+        }
+    }
+
+    async function createDB() {
+        const db = document.getElementById('dbName').value;
+        await sendRequest('/db/create', 'POST', { db });
+    }
+
+    async function createTable() {
+        const db = document.getElementById('dbName').value;
+        const table = document.getElementById('tableName').value;
+        const attrs = document.getElementById('tableAttrs').value.split(',').map(s => s.trim());
+        await sendRequest('/table/create', 'POST', { db, table, attributes: attrs });
+    }
+
+    async function insertData() {
+        const db = document.getElementById('dbName').value;
+        const table = document.getElementById('tableName').value;
+        try {
+            const record = JSON.parse(document.getElementById('insertData').value);
+            await sendRequest('/query/insert', 'POST', { db, table, record });
+            selectData(); // auto refresh
+        } catch(e) {
+            alert("Invalid JSON for Insert Data");
+        }
+    }
+
+    async function selectData() {
+        const db = document.getElementById('dbName').value;
+        const table = document.getElementById('tableName').value;
+        try {
+            const query = JSON.parse(document.getElementById('selectQuery').value);
+            const data = await sendRequest('/query/select', 'POST', { db, table, query });
+            
+            if (data.success && data.data && data.data.length > 0) {
+                renderTable(data.data);
+            } else {
+                document.getElementById('tableContainer').innerHTML = "<p>No rows found.</p>";
+            }
+        } catch(e) {
+            alert("Invalid JSON for Select Query");
+        }
+    }
+
+    function renderTable(rows) {
+        if (!rows || rows.length === 0) return;
+        const keys = Object.keys(rows[0]);
+        let html = '<table><thead><tr>';
+        keys.forEach(k => html += `<th>${k}</th>`);
+        html += '</tr></thead><tbody>';
+        
+        rows.forEach(row => {
+            html += '<tr>';
+            keys.forEach(k => html += `<td>${row[k] !== null ? row[k] : 'NULL'}</td>`);
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        document.getElementById('tableContainer').innerHTML = html;
+    }
+
+    setInterval(async () => {
+        try {
+            // Check node status periodically. We can just guess or implement a /status route.
+            document.getElementById('nodeStatus').innerText = "Node Online. Running on port " + window.location.port;
+        } catch(e) {}
+    }, 5000);
+</script>
+</body>
+</html>
