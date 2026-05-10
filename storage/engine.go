@@ -201,3 +201,66 @@ func (e *Engine) Delete(dbName, tableName string, query map[string]interface{}) 
 	count, _ := res.RowsAffected()
 	return int(count), nil
 }
+
+func (e *Engine) ExecRaw(dbName, rawSQL string) ([]map[string]interface{}, error) {
+	name := e.getDBName(dbName)
+	// Open a connection specifically to this node's database
+	dsn := fmt.Sprintf("root:root@tcp(localhost:3306)/%s?parseTime=true", name)
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	sqlUpper := strings.ToUpper(strings.TrimSpace(rawSQL))
+	isSelect := strings.HasPrefix(sqlUpper, "SELECT") || strings.HasPrefix(sqlUpper, "SHOW")
+
+	if isSelect {
+		rows, err := db.Query(rawSQL)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			return nil, err
+		}
+
+		var results []map[string]interface{}
+		for rows.Next() {
+			columns := make([]interface{}, len(cols))
+			columnPointers := make([]interface{}, len(cols))
+			for i := range columns {
+				columnPointers[i] = &columns[i]
+			}
+
+			if err := rows.Scan(columnPointers...); err != nil {
+				return nil, err
+			}
+
+			m := make(map[string]interface{})
+			for i, colName := range cols {
+				val := columnPointers[i].(*interface{})
+				if *val != nil {
+					if b, ok := (*val).([]byte); ok {
+						m[colName] = string(b)
+					} else {
+						m[colName] = *val
+					}
+				} else {
+					m[colName] = nil
+				}
+			}
+			results = append(results, m)
+		}
+		return results, nil
+	} else {
+		res, err := db.Exec(rawSQL)
+		if err != nil {
+			return nil, err
+		}
+		count, _ := res.RowsAffected()
+		return []map[string]interface{}{{"rows_affected": count}}, nil
+	}
+}

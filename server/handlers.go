@@ -12,6 +12,22 @@ import (
 func (n *Node) startHTTPServer() {
 	mux := http.NewServeMux()
 
+	// Node status endpoint
+	mux.HandleFunc("/node/status", func(w http.ResponseWriter, r *http.Request) {
+		role := "Slave"
+		if n.State == Leader {
+			role = "Master"
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"role": role,
+			"master_id": n.LeaderID,
+			"node_id": n.ID,
+		})
+	})
+
+	// Serve the GUI
+	mux.Handle("/", http.FileServer(http.Dir("./public")))
+
 	// Raft endpoints
 	mux.HandleFunc("/raft/heartbeat", func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]interface{}

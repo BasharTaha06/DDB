@@ -34,6 +34,7 @@
             <label>Database Name:</label>
             <input type="text" id="dbName" value="mydb" placeholder="e.g. mydb">
             <button onclick="createDB()">Create Database</button>
+            <button onclick="dropDB()" style="background: #e74c3c;">Drop Database</button>
 
             <label>Table Name:</label>
             <input type="text" id="tableName" value="users" placeholder="e.g. users">
@@ -54,6 +55,7 @@
             <label>JSON Query Filter (leave {} for all):</label>
             <input type="text" id="selectQuery" value="{}">
             <button onclick="selectData()" style="background: #2ecc71;">Select / View Table</button>
+            <button onclick="deleteData()" style="background: #e74c3c;">Delete Record</button>
         </div>
     </div>
 
@@ -86,6 +88,13 @@
     async function createDB() {
         const db = document.getElementById('dbName').value;
         await sendRequest('/db/create', 'POST', { db });
+    }
+
+    async function dropDB() {
+        const db = document.getElementById('dbName').value;
+        if (confirm(`Are you sure you want to drop the database '${db}'?`)) {
+            await sendRequest('/db/drop', 'POST', { db });
+        }
     }
 
     async function createTable() {
@@ -124,6 +133,18 @@
         }
     }
 
+    async function deleteData() {
+        const db = document.getElementById('dbName').value;
+        const table = document.getElementById('tableName').value;
+        try {
+            const query = JSON.parse(document.getElementById('selectQuery').value);
+            await sendRequest('/query/delete', 'POST', { db, table, query });
+            selectData(); // auto refresh
+        } catch(e) {
+            alert("Invalid JSON for Delete Query");
+        }
+    }
+
     function renderTable(rows) {
         if (!rows || rows.length === 0) return;
         const keys = Object.keys(rows[0]);
@@ -142,10 +163,12 @@
 
     setInterval(async () => {
         try {
-            // Check node status periodically. We can just guess or implement a /status route.
-            document.getElementById('nodeStatus').innerText = "Node Online. Running on port " + window.location.port;
+            const res = await fetch('/node/status');
+            const data = await res.json();
+            const color = data.role === "Master" ? "#e74c3c" : "#3498db";
+            document.getElementById('nodeStatus').innerHTML = `This node is currently a <strong style="color:${color}">${data.role}</strong> (Node ${data.node_id}). The current Master is Node ${data.master_id}.`;
         } catch(e) {}
-    }, 5000);
+    }, 2000);
 </script>
 </body>
 </html>

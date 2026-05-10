@@ -133,8 +133,11 @@ func (n *Node) runFollower() {
 				n.processCommand(cmd)
 			} else if n.LeaderID == "" {
 				cmd.Reply <- CommandReply{StatusCode: 503, Body: []byte(`{"error": "no leader"}`)}
+			} else if cmd.Path == "/db/drop" || cmd.Path == "/db/create" || cmd.Path == "/table/create" {
+				// Master only actions
+				cmd.Reply <- CommandReply{StatusCode: 403, Body: []byte(fmt.Sprintf(`{"error": "Action denied. Rule: Only Master can Create/Drop DB and Create Tables. Current Master is %s"}`, n.LeaderID))}
 			} else {
-				// Forward to leader
+				// All nodes can query (forward write to leader)
 				n.forwardCommand(cmd)
 			}
 
