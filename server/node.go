@@ -188,7 +188,9 @@ func (n *Node) runCandidate() {
 		currentVotes := votes
 		n.mu.RUnlock()
 
-		if currentVotes > (len(n.Peers)+1)/2 {
+		clusterSize := len(n.Peers) + 1 // total nodes including self
+		majority := clusterSize/2 + 1
+		if currentVotes >= majority {
 			log.Printf("Node %s won election, becoming Leader", n.ID)
 			n.State = Leader
 			n.LeaderID = n.ID
